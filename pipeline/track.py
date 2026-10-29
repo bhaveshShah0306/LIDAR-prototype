@@ -21,7 +21,7 @@ COLUMNS = ["frame", "t", "track_id", "class", "conf", "x1", "y1", "x2", "y2"]
 
 
 def track(video, model_name="yolo11n.pt", fps=10.0, conf=0.4, imgsz=640, width=1280,
-          save_video=True):
+        save_video=True):
     video = Path(video)
     cap = cv2.VideoCapture(str(video))
     if not cap.isOpened():
