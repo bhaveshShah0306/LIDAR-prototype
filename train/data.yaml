@@ -1,0 +1,16 @@
+# Dataset description for YOLO fine-tuning (AI #1).
+# `path` must be the ABSOLUTE folder that holds train/ and test/.
+# On Kaggle it's where your uploaded dataset lives; on the laptop e.g. C:/Users/<you>/.../data/labels
+path: /kaggle/input/rear-alert-labels
+train: train/images
+val: test/images   # 50 hand-checked frames from a ride the model never trains on
+
+# Must match CLASSES in pipeline/extract_frames.py, in the same order.
+names:
+  0: car
+  1: bus_truck
+  2: two_wheeler
+  3: auto_rickshaw
+  4: person
+  5: animal
+  6: other
