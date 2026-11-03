@@ -3,6 +3,7 @@ name = "lidar-prototype"
 version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
+    "duckdb>=1.5.6",
     "imageio-ffmpeg>=0.7.0",
     "lap>=0.5.13",
     "opencv-python<5",
