@@ -34,12 +34,31 @@ CLASS_MAP = {
     18: "animal",       # sheep
     19: "animal",       # cow
 }
+
+
+COCO_TO_OURS = {"person": "person", "bicycle": "two_wheeler", "motorcycle": "two_wheeler",
+                "car": "car", "bus": "bus_truck", "truck": "bus_truck",
+                "dog": "animal", "horse": "animal", "sheep": "animal", "cow": "animal"}
+OURS = {"car", "bus_truck", "two_wheeler", "auto_rickshaw", "person", "animal", "other"}
+
+
+def class_map_for(model):
+    """Model class id -> our class name. Works for the COCO model AND our fine-tuned one."""
+    mapping = {}
+    for idx, name in model.names.items():
+        if name in OURS:
+            mapping[idx] = name                 # our model: names are already ours
+        elif name in COCO_TO_OURS:
+            mapping[idx] = COCO_TO_OURS[name]   # COCO model: translate
+    return mapping
 COLOURS = {  # BGR, as OpenCV expects
     "person": (0, 200, 255),
     "two_wheeler": (255, 160, 0),
     "car": (0, 220, 0),
     "bus_truck": (200, 0, 200),
     "animal": (0, 120, 255),
+    "auto_rickshaw": (0, 255, 255),   # yellow
+    "other": (180, 180, 180),         # grey
 }
 COLUMNS = ["frame", "t", "class", "conf", "x1", "y1", "x2", "y2"]
 MIN_HEIGHT = 0.06  # boxes shorter than 6% of the frame height are far away: ignore them

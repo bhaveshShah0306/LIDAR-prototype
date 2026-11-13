@@ -1,0 +1,4 @@
+path: C:/Users/Bhavesh.Shah/Desktop/Py-LIDAR/LIDAR-prototype/data/labels/fgvd
+train: train/images
+val: val/images
+names: {0: car, 1: bus_truck, 2: two_wheeler, 3: auto_rickshaw, 4: person, 5: animal, 6: other}

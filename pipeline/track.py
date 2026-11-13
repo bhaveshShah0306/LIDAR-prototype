@@ -14,6 +14,7 @@ from pathlib import Path
 import cv2
 import pandas as pd
 from ultralytics import YOLO
+from detect import CLASS_MAP, COLOURS, clean, draw, class_map_for
 
 from detect import CLASS_MAP, COLOURS, clean, draw
 
@@ -31,6 +32,8 @@ def track(video, model_name="yolo11n.pt", fps=10.0, conf=0.4, imgsz=640, width=1
     step = max(1, round(src_fps / fps))
 
     model = YOLO(model_name)
+    class_map = class_map_for(model)
+    print("Classes used:", class_map)
     out_table = video.with_name(f"{video.stem}_tracks.parquet")
     out_video = video.with_name(f"{video.stem}_tracked.mp4")
     writer = None
@@ -51,11 +54,11 @@ def track(video, model_name="yolo11n.pt", fps=10.0, conf=0.4, imgsz=640, width=1
             # ByteTrack also uses weak boxes to keep IDs alive through blur and overlap,
             # so let it see everything above 0.1 and apply our own `conf` afterwards.
             result = model.track(frame, persist=True, tracker="bytetrack.yaml", conf=0.1,
-                                 imgsz=imgsz, classes=list(CLASS_MAP), verbose=False)[0]
+                                 imgsz=imgsz, classes=list(class_map), verbose=False)[0]
             boxes = result.boxes
             dets = []
             if boxes.id is not None:  # None until the tracker has confirmed something
-                dets = [[CLASS_MAP[int(k)], c, *xyxy, tid] for xyxy, c, k, tid in
+                dets = [[class_map[int(k)], c, *xyxy, tid] for xyxy, c, k, tid in
                         zip(boxes.xyxy.tolist(), boxes.conf.tolist(), boxes.cls.tolist(),
                             boxes.id.int().tolist()) if c >= conf]
 
