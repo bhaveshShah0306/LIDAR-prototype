@@ -45,7 +45,7 @@ def draw(img_path, label_path):
         cx, cy, w, h = map(float, parts[1:5])  # the other four parts, as floats (hint: map(float, ...))
 
         x1, y1, x2, y2 = yolo_to_pixels(cx, cy, w, h, img_w, img_h)
-        print(line, "->", x1, y1, x2, y2, "image", img_w, img_h)
+        #print(line, "->", x1, y1, x2, y2, "image", img_w, img_h)
         colour = COLOURS[cls]
         cv2.rectangle(img, (x1, y1), (x2, y2), colour, 2)
         cv2.putText(img, CLASSES[cls], (x1, max(15, y1 - 5)),     # the class NAME (hint: CLASSES)

@@ -19,11 +19,12 @@ Python you'll practise: sampling, list/dict building, writing a simple file form
 import argparse
 import json
 from pathlib import Path
+from xml.parsers.expat import model
 
 import cv2
 from ultralytics import YOLO
 
-from detect import CLASS_MAP  # pretrained COCO id -> our class name
+from detect import class_map_for # pretrained COCO id -> our class name
 
 LABELS = Path(__file__).resolve().parent.parent / "data" / "labels"
 WIDTH = 1280
@@ -33,39 +34,41 @@ WIDTH = 1280
 CLASSES = ["car", "bus_truck", "two_wheeler", "auto_rickshaw", "person", "animal", "other"]
 
 
-def sample_frames(video, every_s):
-    """Yield (frame_index, resized_frame) every `every_s` seconds.
+def sample_frames(video, every_s, width=WIDTH):
+    """Yield (frame_index, resized_frame) every `every_s` seconds."""
+    cap = cv2.VideoCapture(str(video))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    step = max(1, round(every_s * fps))                 # frames between two samples
+    idx = 0
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+        if idx % step == 0:
+            if frame.shape[1] > width:        # same resize as track.py
+                h, w = frame.shape[:2]
+                frame = cv2.resize(frame, (width, round(h * width / w)), interpolation=cv2.INTER_AREA)
+            yield idx, frame                         # hand back the index and the frame
+        idx += 1
+    cap.release()
 
-    TODO:
-      1. Open the video, read fps; step = round(every_s * fps).
-      2. Read frames in a loop; when frame_index % step == 0, resize like track.py and yield it.
-      3. Use `yield`, not a list: a 1-hour ride would not fit in memory as a list of frames.
 
-    Check yourself: what is the difference between a function that `return`s a list
-    and one that `yield`s? Which one can handle a 2-hour ride?
-    """
-    raise NotImplementedError("TODO: sample_frames")
-
-
-def yolo_lines(result, frame_w, frame_h):
-    """Turn one YOLO result into lines of 'class_index cx cy w h' (normalised to 0..1).
-
-    TODO:
-      1. For each box: name = CLASS_MAP.get(int(cls)); skip it if None.
-      2. class_index = CLASSES.index(name)
-      3. cx = (x1 + x2) / 2 / frame_w,  cy = (y1 + y2) / 2 / frame_h,
-         w = (x2 - x1) / frame_w,       h = (y2 - y1) / frame_h
-      4. Return a list of strings like f"{class_index} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}"
-
-    Check yourself: why normalise to 0..1 instead of keeping pixels?
-    """
-    raise NotImplementedError("TODO: yolo_lines")
+def yolo_lines(result, class_map):
+    """YOLO label lines for one result, using OUR class numbers."""
+    lines = []
+    for (cx, cy, w, h), k in zip(result.boxes.xywhn.tolist(), result.boxes.cls.tolist()):
+        name = class_map.get(int(k))
+        if name is None:
+            continue
+        lines.append(f"{CLASSES.index(name)} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")   # our class number for `name`
+    return lines
 
 
 def extract(ride_dirs, every_s, model_name="yolo11n.pt", conf=0.3):
     model = YOLO(model_name)
+    class_map = class_map_for(model) 
     LABELS.mkdir(parents=True, exist_ok=True)
-    (LABELS / "classes.txt").write_text("\n".join(CLASSES) + "\n")
+    (LABELS / "classes.txt").write_text("\n".join(CLASSES) + "\n") 
     counts = {}
     for ride in map(Path, ride_dirs):
         meta = json.loads((ride / "meta.json").read_text())
@@ -75,11 +78,10 @@ def extract(ride_dirs, every_s, model_name="yolo11n.pt", conf=0.3):
         lbl_dir.mkdir(parents=True, exist_ok=True)
         for idx, frame in sample_frames(ride / "video.mp4", every_s):
             name = f"{ride.name}_f{idx:06d}"
-            # TODO: 1. run the model on `frame` (conf=conf, classes=list(CLASS_MAP), verbose=False)
-            #       2. save the image: cv2.imwrite(str(img_dir / f"{name}.jpg"), frame)
-            #       3. write yolo_lines(...) to lbl_dir / f"{name}.txt", one line per box
-            #       4. count it: counts[split] = counts.get(split, 0) + 1
-            raise NotImplementedError("TODO: save image + labels")
+            r = model.predict(frame, conf=conf, verbose=False)[0]
+            cv2.imwrite(str(img_dir / f"{name}.jpg"), frame)
+            (lbl_dir / f"{name}.txt").write_text("\n".join(yolo_lines(r, class_map)) + "\n")
+            counts[split] = counts.get(split, 0) + 1
     print(f"Saved frames per split: {counts}")
 
 
