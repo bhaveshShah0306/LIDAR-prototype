@@ -168,6 +168,74 @@ YOLO11n inference ~34 ms per image on CPU.
 | total | 1,379 | 1,489 |
 
 - TODO: check riders consistently have a person box (person count dropped by 124).
+## 9. Detector v2 (`models/fgvd_v2.pt`)
+
+### Training
+- Start: yolo11n.pt (COCO), NOT continued from v1 -> one clean recipe, fair comparison.
+- Data: FGVD train (3,535) + my 206 rear-facing frames listed 5x (oversampling)
+  -> ~4,565 training images per epoch (143 batches of 32). Validation: FGVD val (884).
+- Same settings as v1: 50 epochs, imgsz 640, batch 32, patience 15, Kaggle T4 (~40 min).
+- Kaggle lessons from this round:
+  - The first v2 run was interactive: its /kaggle/working output (incl. best.pt) was deleted
+    when the session ended. Re-ran as "Save & Run All" (committed version), where outputs persist.
+  - A half-finished dataset copy in /kaggle/temp made the old "folder exists?" check skip the
+    copy -> FileNotFoundError. Fixed by comparing file counts and re-copying if incomplete.
+  - Several runs at once each use GPU quota: check Active Events, stop idle sessions.
+  - The downloaded .pt arrived as .zip: a .pt IS a zip archive inside; just rename it.
+  - Verified with ckpt['train_args']['name'] == 'v2'.
+
+### FGVD validation (does v2 still know FGVD?)
+| Class | v1 mAP50 | v2 mAP50 | v1 mAP50-95 | v2 mAP50-95 |
+|---|---|---|---|---|
+| car | 0.924 | 0.919 | 0.791 | 0.782 |
+| bus_truck | 0.853 | 0.835 | 0.716 | 0.697 |
+| two_wheeler | 0.882 | TODO | 0.623 | TODO |
+| auto_rickshaw | 0.914 | 0.904 | 0.797 | 0.783 |
+| person | 0.917 | 0.911 | 0.757 | 0.742 |
+| animal | 0.038 | 0.332 | 0.023 | 0.133 |
+| all | 0.755 | 0.796 | 0.618 | 0.623 |
+- No meaningful forgetting: real classes changed by -0.5 to -2 points (normal cost of learning
+  a second viewpoint).
+- The higher "all" comes from `animal` (1 validation example) -> noise, not an improvement.
+- Table is from the first (interactive) v2 run; the kept model is the committed re-run
+  (deterministic, seed 0, so numbers should match closely). TODO: copy that run's table.
+
+### On my training ride 2026-11-12_1 (sanity check - NOT a fair test, v2 saw 206 of its frames)
+Clean tracks (clean_tracks.py):
+| Class | v1 tracks | v2 tracks | v1 boxes | v2 boxes |
+|---|---|---|---|---|
+| bus_truck | 61 | 18 | 829 | 292 |
+| auto_rickshaw | 84 | 206 | 1,373 | 3,555 |
+| car | 152 | 265 | 2,148 | 4,251 |
+| two_wheeler | 79 | 191 | 887 | 3,633 |
+| person | 83 | 112 | 1,482 | 1,159 |
+| other | 0 | 12 | 0 | 120 |
+| total | 459 | 804 | 6,719 | 13,010 |
+- v2 finds almost twice as many objects: far more confident on the rear view.
+- bus_truck -70%, auto_rickshaw x2.5, `other` now detected.
+- Person boxes down while person tracks up -> check riders still get a person box
+  (my labels had fewer person boxes than the pre-labels).
+
+bus_truck tracks of 5+ frames, judged by eye from crops (track_crops.py):
+| Model | tracks | real bus/truck | auto | car | other | precision |
+|---|---|---|---|---|---|---|
+| v1 | 65 | 3 | 31 | 26 | 4 | 4.7% |
+| v2 | 18 | 16 | 2 | 0 | 0 | 89% |
+("real" includes goods three-wheelers / tempos, per the labelling rules.)
+
+Example, t = 117 s (frame 3510):
+- close white car cut off at the edge: v1 bus_truck -> v2 car 0.96
+- close auto: v1 bus_truck -> v2 auto_rickshaw
+- second car behind: v1 missed -> v2 car 0.91
+
+Speed: v2 + ByteTrack at 1280x720: 3,103 frames in 216 s = ~14.4 fps on the i5 CPU (no GPU)
+-> faster than the 10 fps the pipeline needs.
+
+### Open points
+- 2 autos still labelled bus_truck: look at what they have in common.
+- Small pedestrians: check whether v2 boxes them (lower min-height slider in review.py).
+- FAIR TEST: new landscape ride (unseen, ideally another route) -> run v1 and v2 -> same crop
+  check -> optionally label ~100 test frames and compare mAP on my own footage.
 
 ### Labelling rules (apply the same way every time)
 - One box per vehicle, never one box over two vehicles. Boxes may overlap.

@@ -17,6 +17,7 @@ Marks are appended to data/rides/<ride>/review_marks.csv (frame, t, note).
 import argparse
 import csv
 from pathlib import Path
+from tracemalloc import start
 
 import cv2
 import pandas as pd
@@ -49,7 +50,7 @@ def save_mark(path, n, t, note):
         writer.writerow([n, round(t, 2), note])
 
 
-def review(ride):
+def review(ride, start=0.0):
     ride = Path(ride)
     tracks = pd.read_parquet(ride / "video_tracks.parquet").rename(columns={"class": "cls"})
     by_frame = {n: rows for n, rows in tracks.groupby("frame")}
@@ -65,7 +66,8 @@ def review(ride):
     cv2.createTrackbar("min conf %", WIN, 40, 100, lambda v: None)
     cv2.createTrackbar("min height %", WIN, 6, 30, lambda v: None)
 
-    i, playing, cached_n, cached = 0, False, None, None
+    i = min(len(frame_ids) - 1, round(start * src_fps / step))   # jump to the start time
+    playing, cached_n, cached = False, None, None
     while 0 <= i < len(frame_ids):
         n = frame_ids[i]
         if n != cached_n:  # only decode when the frame changes (sliders redraw from the cache)
@@ -114,4 +116,6 @@ def review(ride):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("ride_dir")
-    review(ap.parse_args().ride_dir)
+    ap.add_argument("--start", type=float, default=0.0, help="start at this many seconds")
+    args = ap.parse_args()
+    review(args.ride_dir, start=args.start)
