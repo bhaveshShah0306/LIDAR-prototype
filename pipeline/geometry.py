@@ -26,7 +26,9 @@ CALIBRATION = Path(__file__).resolve().parent.parent / "data" / "calibration.jso
 WIDTH = 1280        # track.py resizes to at most this width; boxes are in that size
 FPS = 10.0          # track.py analyses 10 frames per second
 TTC_WINDOW_S = 0.5  # fit the growth over the last 0.5 s (5 frames)
-
+SIDE_FRACTION = 1 / 3   # each side zone covers this share of the frame width
+MAX_TTC_S = 20.0  # TTC above this is "no threat": stored as inf
+MAX_DIST_M = 50.0  # beyond this, the ground-contact distance is too uncertain: NaN
 
 def processed_size(meta, width=WIDTH):
     """Frame size the boxes were measured in (after track.py's resize)."""
@@ -36,58 +38,63 @@ def processed_size(meta, width=WIDTH):
     return w, h
 
 
-def zone_of(cx, frame_w):
-    """Rider's side for a box centre x: "RIGHT", "CENTRE" or "LEFT" (a pandas Series in, Series out).
+def zone_of(cx, frame_w, side=SIDE_FRACTION):
+    """Rider's side for each box centre x: "RIGHT", "CENTRE" or "LEFT".
 
-    The camera faces BACKWARDS, so the image is mirrored compared with the rider's view:
-    the LEFT third of the image is the rider's RIGHT side.
-
-    TODO:
-      1. Split the frame width into thirds (start with thirds, tune the borders later by eye).
-      2. Use np.select([cx < frame_w / 3, cx > 2 * frame_w / 3], ["RIGHT", "LEFT"], default="CENTRE")
-      3. Return it as a pd.Series with the same index as cx.
-
-    Check yourself: India drives on the left. On which side of the IMAGE should most overtakes appear?
+    The camera faces backwards, so the image is mirrored:
+    image-left = rider's RIGHT, image-right = rider's LEFT.
     """
-    raise NotImplementedError("TODO: zone_of")
+    left_edge = frame_w * side            # pixels: end of the image-left zone
+    right_edge = frame_w * (1 - side)     # pixels: start of the image-right zone
+
+    in_image_left = cx < left_edge             # True/False for every row
+    in_image_right = cx > right_edge
+
+    zones = np.select(
+        [in_image_left, in_image_right],     # conditions, checked in order
+        ["RIGHT", "LEFT"], # what each one means for the RIDER (mirror!)
+        default="CENTRE",                    # neither condition is true
+    )
+    return pd.Series(zones, index=cx.index)
 
 
-def add_ttc(df, fps=FPS, window_s=TTC_WINDOW_S):
+def add_ttc(df, fps=FPS, window_s=TTC_WINDOW_S, max_ttc=MAX_TTC_S):
     """Add `ttc_s`: seconds until the object reaches you, from how fast its box grows.
 
-    Idea: if the box height h grows, the object is getting closer. For a steady approach,
-    log(h) rises in a straight line, and TTC = 1 / slope_of_log_h_per_second.
-    Shrinking or steady boxes (slope <= 0) never reach you: TTC = inf.
-
-    TODO:
-      1. df = df.sort_values(["track_id", "frame"]); df["log_h"] = np.log(df["h"])
-      2. n = max(3, round(window_s * fps)) frames per window.
-      3. Write  def slope(values):  that fits a straight line to `values` against time
-         (np.arange(len(values)) / fps) with np.polyfit(..., 1) and returns the slope.
-      4. Per track, rolling over the last n rows, apply `slope`:
-            df.groupby("track_id")["log_h"].rolling(n, min_periods=3).apply(slope, raw=True)
-         The result has an extra index level: .reset_index(level=0, drop=True) lines it up with df.
-      5. ttc = 1 / slope where slope > 0, else np.inf. Clip very large values to np.inf (e.g. > 20 s).
-      6. Drop the helper column, return df.
-
-    Check yourself: rolling windows look BACKWARDS by default. Why does that matter later,
-    when this TTC becomes a feature for the model in features.py?
+    For a steady approach, ln(h) grows at rate 1/TTC, so TTC = 1 / slope of ln(h).
+    Compares each box with the SAME track's box `window_s` earlier (past only).
+    Shrinking/steady boxes, or tracks without enough history yet: TTC = inf.
     """
-    raise NotImplementedError("TODO: add_ttc")
+    df = df.sort_values(["track_id", "frame"]).copy()
+    n = max(1, round(window_s * fps))                  # rows to look back (0.5 s * 10 fps = 5)
+
+    log_h = np.log(df["h"])
+    by_track = df["track_id"]
+
+    d_log_h = log_h - log_h.groupby(by_track).shift(n)      # growth over the last n rows
+    d_t = df["t"] - df["t"].groupby(by_track).shift(n)      # real seconds between them
+
+    slope = d_log_h / d_t                              # growth rate per second (1/s)
+    df["ttc_s"] = np.where(slope > 0, 1 / slope, np.inf)
+    df.loc[df["ttc_s"] > max_ttc, "ttc_s"] = np.inf
+    return df
 
 
-def add_distance(df, calib):
+def add_distance(df, calib, max_dist=MAX_DIST_M):
     """Add `dist_m` from where the box touches the road: Z = k / (y2 - y_horizon).
 
-    TODO:
-      1. If calib is None: df["dist_m"] = np.nan and return (calibration comes later).
-      2. Otherwise compute k / (df["y2"] - calib["y_horizon"]).
-      3. Boxes whose bottom is at or above the horizon (y2 <= y_horizon) have no valid distance: NaN.
-      4. Very large values (> 50 m) aren't trustworthy either: NaN.
-
-    Check yourself: why the BOTTOM edge (y2) and not the box centre?
+    calib is None until calibrate.py has written data/calibration.json: dist_m stays NaN.
     """
-    raise NotImplementedError("TODO: add_distance")
+    df = df.copy()
+    df["dist_m"] = np.nan
+    if calib is None:
+        return df
+
+    below = df["y2"] - calib["y_horizon"]          # pixels between the box bottom and the horizon
+    valid = below > 0                      # at or above the horizon: no ground contact, no distance
+    df.loc[valid, "dist_m"] = calib["k"] / below[valid]
+    df.loc[df["dist_m"] > max_dist, "dist_m"] = np.nan
+    return df
 
 
 def geometry(ride_dir):
@@ -108,8 +115,11 @@ def geometry(ride_dir):
 
     out = ride_dir / "video_geometry.parquet"
     df.to_parquet(out, index=False)
-    print(df[["zone", "ttc_s", "dist_m"]].describe(include="all").to_string())
-    print(f"Saved {out}")
+    finite = df["ttc_s"].replace(np.inf, np.nan)
+    print(df["zone"].value_counts().to_string())
+    print(f"rows with a finite TTC: {finite.notna().mean():.0%}")
+    print(finite.describe().round(2).to_string())
+    print(f"rows with a distance: {df['dist_m'].notna().mean():.0%}")
     return df
 
 
