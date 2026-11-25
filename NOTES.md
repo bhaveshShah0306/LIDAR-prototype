@@ -295,6 +295,10 @@ Speed: v2 + ByteTrack at 1280x720: 3,103 frames in 216 s = ~14.4 fps on the i5 C
   counts while the vehicle is closing (finite TTC), so a jam doesn't keep the light on.
 - Distance from ground contact: dist_m = k / (y2 - y_horizon), kept only up to 50 m
   (near the horizon 1 px ~ several metres). Needs calibration (calibrate.py, tape marks).
+  - Considered and dropped for now: red light on MY sideways movement (optical flow / phone gyro),
+  side ultrasonic sensors (future work: the right tool for vehicles fully alongside).
+- Collision corridor (scooter + 1 m each side, sideways metres from ground contact):
+  optional; build only if the alarm tally shows many "wide pass" false alarms.
 
 ## 12. Next steps
 
@@ -304,9 +308,15 @@ Speed: v2 + ByteTrack at 1280x720: 3,103 frames in 216 s = ~14.4 fps on the i5 C
 3. Train v2 on Kaggle: FGVD + own frames (own frames oversampled ~5x), evaluate on my test frames.
 4. Compare v1 vs v2: mAP on my test frames, per-class recall, bus_truck precision from crops.
 5. Then geometry.py (TTC, zones, distance), rules.py, events/features/risk.py (AI #2).
+1. Alarm tally on 2026-11-20_1 (31 red alarms): real / false artefact / false wide pass /
+   miss close-no-light / miss detector. This is the rule baseline AI #2 must beat.
+2. Calibration: measure camera height (tape); field session with marks at 3, 5, 8, 12, 20 m.
+3. Record 2-3 more landscape rides (same mount, stabilisation off) for AI #2.
+4. AI #2: events.py (label: within 3 m while closing in the next 2 s), features.py, risk.py.
+5. Open: check rider person boxes; the 4 unchecked empty frames.
 
 
-## Fair test: unseen ride 2026-11-20_1 (landscape, 341 s, split = test)
+## 14. Fair test: unseen ride 2026-11-20_1 (landscape, 341 s, split = test)
 Clean tracks: bus_truck 91 -> 10, auto_rickshaw 56 -> 102, car 73 -> 115,
 two_wheeler 100 -> 154, person 55 -> 99, other 0 -> 17 (v1 -> v2).
 
