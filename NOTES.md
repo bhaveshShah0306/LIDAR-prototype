@@ -6,6 +6,12 @@ Goal: an AI-centred learning project (computer vision + supervised learning), bu
 
 ---
 
+
+**Scope:** one rear-facing phone camera. The system only sees, and warns about, what is inside
+that camera's frame: no side or front coverage, no blind-spot handling. Distance is valid only
+where a vehicle's contact with the road is visible in the frame; very close vehicles cut off by
+the frame edge are handled by time-to-collision (TTC), which needs no distance.
+
 ## 1. Setup and environment
 
 - Laptop: Dell Latitude 3420, i5-1135G7 (4 cores, Iris Xe), 16 GB RAM, no NVIDIA GPU.
@@ -280,6 +286,15 @@ Speed: v2 + ByteTrack at 1280x720: 3,103 frames in 216 s = ~14.4 fps on the i5 C
   Closing the gap to radar is done with AI (own data, retraining, optional monocular depth).
 - Handlebar lights shown on screen; ESP32 LEDs optional.
 - Live demo later: phone stream -> laptop, tested standing still; never ride with the laptop.
+- Zones: frame split into thirds on box centre x; image is mirrored (image-left = rider's RIGHT).
+  Indian two-wheelers overtake on BOTH sides, so both lights use the same thresholds, and CENTRE
+  boxes count for both sides.
+- TTC (from box-height growth over 0.5 s) is the main trigger: it adapts to closing speed
+  (warns at ~4.5 m for a 3 m/s overtake, ~12 m for an 8 m/s bike).
+- Danger zone from riding experience: within 3-5 m. Distance rule (red < 3 m, amber < 5 m) only
+  counts while the vehicle is closing (finite TTC), so a jam doesn't keep the light on.
+- Distance from ground contact: dist_m = k / (y2 - y_horizon), kept only up to 50 m
+  (near the horizon 1 px ~ several metres). Needs calibration (calibrate.py, tape marks).
 
 ## 12. Next steps
 
@@ -289,3 +304,17 @@ Speed: v2 + ByteTrack at 1280x720: 3,103 frames in 216 s = ~14.4 fps on the i5 C
 3. Train v2 on Kaggle: FGVD + own frames (own frames oversampled ~5x), evaluate on my test frames.
 4. Compare v1 vs v2: mAP on my test frames, per-class recall, bus_truck precision from crops.
 5. Then geometry.py (TTC, zones, distance), rules.py, events/features/risk.py (AI #2).
+
+
+## Fair test: unseen ride 2026-11-20_1 (landscape, 341 s, split = test)
+Clean tracks: bus_truck 91 -> 10, auto_rickshaw 56 -> 102, car 73 -> 115,
+two_wheeler 100 -> 154, person 55 -> 99, other 0 -> 17 (v1 -> v2).
+
+bus_truck tracks (5+ frames), judged blind from crops:
+| Model | tracks | real | car | auto | other | precision |
+|---|---|---|---|---|---|---|
+| v1 | 93 | 9 | 26 | 45 | 1 | ~11% (9/81, 12 crops still to sort) |
+| v2 | 14 | 11 | 0 | 2 | 1 | ~79% (11/14) |
+- Close cars as bus_truck: 26 -> 0. Autos as bus_truck: 45 -> 2.
+- Generalises to an unseen ride; lower than on the training ride (89%), as expected.
+- Small sample (14); precision only, recall not yet measured.
