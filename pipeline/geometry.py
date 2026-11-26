@@ -29,6 +29,8 @@ TTC_WINDOW_S = 0.5  # fit the growth over the last 0.5 s (5 frames)
 SIDE_FRACTION = 1 / 3   # each side zone covers this share of the frame width
 MAX_TTC_S = 20.0  # TTC above this is "no threat": stored as inf
 MAX_DIST_M = 50.0  # beyond this, the ground-contact distance is too uncertain: NaN
+HALF_WIDTH_M = 0.45   # Activa mirror-tip half-width; confirm with a tape
+CORRIDOR_M   = 1.0     # safety buffer each side; tune on the judged alarms once calibrated
 
 def processed_size(meta, width=WIDTH):
     """Frame size the boxes were measured in (after track.py's resize)."""
@@ -122,6 +124,30 @@ def geometry(ride_dir):
     print(f"rows with a distance: {df['dist_m'].notna().mean():.0%}")
     return df
 
+def draw_reference(frame, calib, frame_w):
+    """Overlay the horizon, the collision corridor, and (if k is known) distance rings."""
+    import cv2
+    h, w = frame.shape[:2]
+    yh, H = int(calib["y_horizon"]), calib["camera_height"]
+    c0 = calib.get("c0", frame_w / 2)
+    grey, amber = (200, 200, 200), (0, 191, 255)
+    cv2.line(frame, (0, yh), (w, yh), grey, 1)                       # horizon
+
+    half = HALF_WIDTH_M + CORRIDOR_M                                 # corridor half-width in metres
+    for sign in (-1, 1):                                             # left and right edge of the corridor
+        pts = [(int(c0 + sign * half * (y - yh) / H), y) for y in range(yh + 1, h, 8)]
+        cv2.polylines(frame, [np.array(pts)], False, amber, 2)
+
+    if "k" in calib:                                                 # exact rings only once calibrated
+        for Z in (3, 5, 10, 20):
+            y = yh + round(calib["k"] / Z)
+            if yh < y < h:
+                cv2.line(frame, (0, y), (w, y), grey, 1)
+                cv2.putText(frame, f"{Z} m", (10, y - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.6, grey, 1)
+    if calib.get("approx"):
+        cv2.putText(frame, "CORRIDOR APPROX (uncalibrated)", (10, 60),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, amber, 2)
+    return frame
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

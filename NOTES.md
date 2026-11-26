@@ -299,6 +299,16 @@ Speed: v2 + ByteTrack at 1280x720: 3,103 frames in 216 s = ~14.4 fps on the i5 C
   side ultrasonic sensors (future work: the right tool for vehicles fully alongside).
 - Collision corridor (scooter + 1 m each side, sideways metres from ground contact):
   optional; build only if the alarm tally shows many "wide pass" false alarms.
+  Corridor half-width from the Activa: HALF_WIDTH_M ~0.45 (mirror-tip, measure with tape),
+  CORRIDOR_M buffer 1.0 m (tune on judged alarms once calibrated). c0 = column straight
+  behind; = frame centre only if the mount is centred and square, else read it off the footage.
+- One Activa only is fine, by design. The MODEL generalises: AI #1 detects other vehicles;
+  AI #2 features are physical (TTC in s, gap in m, class, zone), so they mean the same from any
+  bike. Only CALIBRATION (camera height, horizon, c0) is per-vehicle - a ~20-min re-measure, no
+  retraining (like a car's per-model sensor calibration). What must actually generalise is NEW
+  TRAFFIC, tested by a held-out ride; guard against overfitting to my roads with features in
+  metres/seconds (not pixels) and several rides. Optional cross-bike demo: one calibration +
+  a short ride on a borrowed scooter, run the same trained model.
 
 ## 12. Next steps
 
