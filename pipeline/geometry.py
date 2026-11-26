@@ -149,6 +149,29 @@ def draw_reference(frame, calib, frame_w):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, amber, 2)
     return frame
 
+def add_lateral(df, calib, frame_w, margin=CORRIDOR_M):
+    """Add lat_m (sideways metres of the vehicle's nearest edge; +ve = rider's LEFT),
+    gap_m (from that edge to the scooter's side), and in_corridor (gap within `margin`).
+
+    X = camera_height * (x - c0) / (y2 - y_horizon). NaN until calibration exists.
+    """
+    df = df.copy()
+    df["lat_m"] = np.nan
+    df["gap_m"] = np.nan
+    df["in_corridor"] = False
+    if calib is None or "camera_height" not in calib:
+        return df
+
+    c0 = calib.get("c0", frame_w / 2)                      # column straight behind you
+    below = df["y2"] - calib["y_horizon"]                  # same ground-contact term as distance
+    valid = below > 0
+    inner_x = pd.Series(np.where(df["cx"] > c0, df["x1"], df["x2"]), index=df.index)  # near edge
+    df.loc[valid, "lat_m"] = calib["camera_height"] * (inner_x[valid] - c0) / below[valid]
+
+    df["gap_m"] = df["lat_m"].abs() - HALF_WIDTH_M         # NaN stays NaN
+    df["in_corridor"] = df["gap_m"] < margin
+    return df
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("ride_dir")
