@@ -33,7 +33,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
+import geometry 
+from geometry import processed_size
 HORIZON_S = 2.0
 WIDTH = 1280
 EDGE_MARGIN = 0.03   # within 3% of the left/right/bottom image edge counts as "at the edge"
@@ -63,19 +64,20 @@ def edge_events(track, frame_w, frame_h):
 
     B. passed alongside: the track's LAST row is big and touches the left or right edge.
     C. too close to measure: any row that is big and touches the bottom edge.
-
-    TODO:
-      1. big = (track["y2"] - track["y1"]) > BIG_H * frame_h
-      2. side = (track["x1"] < EDGE_MARGIN * frame_w) | (track["x2"] > (1 - EDGE_MARGIN) * frame_w)
-      3. bottom = track["y2"] > (1 - EDGE_MARGIN) * frame_h
-      4. times_b = track["t"].to_numpy()[-1:] if (big & side).iloc[-1] else np.array([])
-      5. times_c = track.loc[big & bottom, "t"].to_numpy()
-      6. return np.concatenate([times_b, times_c])
-
-    Check yourself: why only the LAST row for B? (Hint: a big box at the side edge in the middle
-    of a track may still be coming towards you; one that ENDS there has gone past you.)
+    Returns a numpy array of event times (seconds).
     """
-    raise NotImplementedError("TODO: edge_events")
+    h = track["y2"] - track["y1"]                                   # box height of every row
+    big = h > BIG_H * frame_h                                        # taller than 25% of the frame
+
+    left = track["x1"] < EDGE_MARGIN * frame_w                              # touching the left edge
+    right = track["x2"] > (1 - EDGE_MARGIN) * frame_w                       # touching the right edge
+    side = left | right                                           # either edge
+    bottom = track["y2"] > (1 - EDGE_MARGIN) * frame_h             # touching the bottom edge
+
+    passed = (big & side).iloc[-1]                                 # only the LAST row counts for B
+    times_b = track["t"].to_numpy()[-1:] if passed else np.array([])
+    times_c = track.loc[big & bottom, "t"].to_numpy()
+    return np.concatenate([times_b, times_c])
 
 
 def label_track(track, frame_w, frame_h, horizon=HORIZON_S):
@@ -99,7 +101,7 @@ def label_track(track, frame_w, frame_h, horizon=HORIZON_S):
 def events(ride_dir):
     ride_dir = Path(ride_dir)
     meta = json.loads((ride_dir / "meta.json").read_text())
-    w, h = meta["width"], meta["height"]
+    w, h = processed_size(meta)
     frame_w, frame_h = (WIDTH, round(h * WIDTH / w)) if w > WIDTH else (w, h)
 
     df = pd.read_parquet(ride_dir / "video_geometry.parquet").sort_values(["track_id", "frame"])
