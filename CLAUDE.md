@@ -91,12 +91,17 @@ Tools: `review.py`, `judge_alarms.py` (key-per-alarm verdicts into alarms_tally.
 
 ## Current state (update every session)
 - Last commits: rules.py frame definitions; horizon and collision markers on the processed
-  video; `add_lateral` in geometry.py; features on a fake ride; events.py drafted (A needs
-  calibration, B and C work now).
+  video; `add_lateral` in geometry.py; features on a fake ride.
+- Written and working: geometry.py, rules.py, features.py.
+- Design finalized but functions still TODO (`raise NotImplementedError`):
+  events.py (`close_events`, `edge_events`, `label_track`), calibrate.py (`click_rows`, `fit`,
+  `rms_error`), risk.py (all). looming.py is an optional extra, also TODO.
 - **Next:**
-  1. Calibration: measure camera height (tape, scooter upright); field session with marks at
-     3, 5, 8, 12, 20 m; run calibrate.py; rms_error_m < 0.5 m.
-  2. Re-run geometry.py -> finalize events.py; watch the positive moments and count correct ones.
+  1. Write events.py `edge_events` + `label_track` (B and C need no calibration) and test on
+     2026-11-20_1; `close_events` (A) can be written now and starts finding events after calibration.
+  2. Write calibrate.py `fit` + `rms_error` (testable with made-up numbers) and `click_rows`.
+     Field: measure camera height (tape, scooter upright); marks at 3, 5, 8, 12, 20 m;
+     rms_error_m < 0.5 m. Then re-run geometry.py and events.py.
   3. Record 2-3 more landscape rides (same mount, stabilisation off, 1x lens).
   4. features.py on real rides -> risk.py: LightGBM vs rule on a held-out ride
      (precision, recall, false alarms/min, warning lead time).
